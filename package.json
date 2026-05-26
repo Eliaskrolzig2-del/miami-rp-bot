@@ -1,0 +1,22 @@
+{
+  "name": "notruf-hamburg-geoguessr-bot",
+  "version": "1.0.0",
+  "description": "Discord bot für Notruf Hamburg GeoGuessr mit Guess-, Punkte- und Ranglisten-Kommandos.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.26.4",
+    "dotenv": "^16.6.1",
+    "openai": "^6.39.0"
+  },
+  "devDependencies": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

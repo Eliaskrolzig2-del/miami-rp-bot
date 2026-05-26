@@ -1,0 +1,115 @@
+[
+  {
+    "name": "Busfirma",
+    "aliases": ["Bus Depot", "Busunternehmen"],
+    "category": "Industrie",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508213419231150270/image.png"
+  },
+  {
+    "name": "Bahnhof",
+    "aliases": ["Hauptbahnhof", "Station"],
+    "category": "Transport",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508213679408025833/image.png"
+  },
+  {
+    "name": "Gefängnis",
+    "aliases": ["JVA", "Knast"],
+    "category": "Behörde",
+    "difficulty": 3,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508213783821025381/image.png"
+  },
+  {
+    "name": "Polizeiwache",
+    "aliases": ["Polizei", "Revier"],
+    "category": "Behörde",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508213901794218105/image.png"
+  },
+  {
+    "name": "Krankenhaus",
+    "aliases": ["Hospital", "Klinik"],
+    "category": "Medizin",
+    "difficulty": 2,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508214007117512854/image.png"
+  },
+  {
+    "name": "Tuningwerkstatt",
+    "aliases": ["Werkstatt", "Car Tuning"],
+    "category": "Gewerbe",
+    "difficulty": 2,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508214172369027182/image.png"
+  },
+  {
+    "name": "Kleiderladen",
+    "aliases": ["Kleidung", "Shop", "Mode Laden"],
+    "category": "Gewerbe",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508214348223348786/image.png"
+  },
+
+  {
+    "name": "Gasn-Go Tankstelle",
+    "aliases": ["Tankstelle GasnGo", "GasnGo", "Tankstelle"],
+    "category": "Tankstelle",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508222231862313040/image.png"
+  },
+  {
+    "name": "Club",
+    "aliases": ["Nightclub", "Disco"],
+    "category": "Freizeit",
+    "difficulty": 2,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508222118020518100/image.png"
+  },
+  {
+    "name": "LKW Firma",
+    "aliases": ["Spedition", "Truck Company"],
+    "category": "Industrie",
+    "difficulty": 2,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508222000580001792/image.png"
+  },
+  {
+    "name": "Grenze",
+    "aliases": ["Checkpoint", "Border"],
+    "category": "Region",
+    "difficulty": 3,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508221896116670616/image.png"
+  },
+  {
+    "name": "Hofladen",
+    "aliases": ["Farm Shop", "Landladen"],
+    "category": "Landwirtschaft",
+    "difficulty": 2,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508221774192447639/image.png"
+  },
+  {
+    "name": "Hafen",
+    "aliases": ["Port", "Dock"],
+    "category": "Industrie",
+    "difficulty": 2,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508221602611986463/image.png"
+  },
+  {
+    "name": "Ares Tankstelle",
+    "aliases": ["Ares", "Tankstelle Ares"],
+    "category": "Tankstelle",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508221382809616434/image.png"
+  },
+  {
+    "name": "Baustelle",
+    "aliases": ["Construction Site", "Bau"],
+    "category": "Industrie",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508221220984979567/image.png"
+  },
+  {
+    "name": "Osso Tankstelle",
+    "aliases": ["Osso", "Tankstelle Osso"],
+    "category": "Tankstelle",
+    "difficulty": 1,
+    "imageUrl": "https://cdn.discordapp.com/attachments/1503380317732606073/1508221104290795640/image.png"
+  }
+]
