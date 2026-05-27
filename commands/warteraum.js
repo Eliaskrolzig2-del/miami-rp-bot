@@ -9,8 +9,11 @@ const {
 
 const path = require("path");
 
-// ================= RENDER SAFE GUARD =================
-if (global.__warteraum_loaded__) return;
+/* ================= SAFE LOAD (verhindert Doppel-Events auf Render) ================= */
+if (global.__warteraum_loaded__) {
+    console.log("⚠️ Warteraum bereits geladen");
+    return;
+}
 global.__warteraum_loaded__ = true;
 
 module.exports = (client) => {
@@ -36,13 +39,11 @@ module.exports = (client) => {
                 oldState.channelId === WAITING_ROOM_ID &&
                 newState.channelId !== WAITING_ROOM_ID;
 
-            // ================= JOIN =================
+            /* ================= JOIN ================= */
             if (joined) {
 
                 const member = newState.member;
                 if (!member) return;
-
-                console.log("🎧 Join:", member.user.tag);
 
                 const log = client.channels.cache.get(LOG_CHANNEL_ID);
                 log?.send(`🎧 ${member} im Warteraum`);
@@ -53,17 +54,15 @@ Mo–Fr: 16–20 Uhr
 Sa: 12–22 Uhr
 So: 12–20 Uhr`;
 
-                // DM
                 try {
                     await member.send(`👋 Willkommen im Support!\n\n${supportTimes}`);
                 } catch {
-                    log?.send(`⚠️ <@${member.id}> keine DM möglich\n\n${supportTimes}`);
+                    log?.send(`⚠️ <@${member.id}> keine DM möglich`);
                 }
 
-                // ================= SAFE VOICE CONNECT =================
-                if (!connection || connection.state.status === "destroyed") {
+                /* ================= SAFE VOICE CONNECT ================= */
+                if (!connection && !connecting) {
 
-                    if (connecting) return;
                     connecting = true;
 
                     connection = joinVoiceChannel({
@@ -73,11 +72,15 @@ So: 12–20 Uhr`;
                         selfDeaf: false
                     });
 
-                    await entersState(connection, VoiceConnectionStatus.Ready, 15000)
-                        .catch(() => null);
+                    await entersState(
+                        connection,
+                        VoiceConnectionStatus.Ready,
+                        15000
+                    ).catch(() => null);
 
                     connecting = false;
 
+                    /* ================= MUSIC FIX ================= */
                     const musicPath = path.join(__dirname, "musik.mp3");
 
                     musicPlayer = createAudioPlayer({
@@ -95,7 +98,7 @@ So: 12–20 Uhr`;
                 }
             }
 
-            // ================= LEAVE =================
+            /* ================= LEAVE ================= */
             if (left) {
 
                 const channel = oldState.channel;
@@ -114,7 +117,7 @@ So: 12–20 Uhr`;
             }
 
         } catch (err) {
-            console.log("❌ Fehler:", err);
+            console.log("❌ Warteraum Fehler:", err);
         }
     });
 };
