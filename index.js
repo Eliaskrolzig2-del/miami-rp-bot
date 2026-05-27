@@ -93,7 +93,6 @@ client.once(Events.ClientReady, async () => {
   const ch = await client.channels.fetch(VERIFY_CHANNEL).catch(() => null);
 
   if (ch) {
-
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("verify")
@@ -115,31 +114,19 @@ client.on("interactionCreate", async (i) => {
   if (!i.isButton()) return;
 
   if (i.customId === "verify") {
-
     const role = i.guild.roles.cache.get(VERIFIED_ROLE);
 
     if (!role) {
-      return i.reply({
-        content: "❌ Rolle nicht gefunden",
-        ephemeral: true
-      });
+      return i.reply({ content: "❌ Rolle nicht gefunden", ephemeral: true });
     }
 
     await i.member.roles.add(role);
 
-    return i.reply({
-      content: "✅ Du wurdest verifiziert",
-      ephemeral: true
-    });
+    return i.reply({ content: "✅ Du wurdest verifiziert", ephemeral: true });
   }
 });
 
-// ================= JOIN ROLE =================
-client.on("guildMemberAdd", async (member) => {
-  member.roles.add(JOIN_ROLE).catch(() => {});
-});
-
-// ================= 🔧 ONLY FIX: EIN-/AUSREISE DUPLICATE PROTECTION =================
+// ================= JOIN ROLE + EIN/AUSREISE + LOG (FIXED SINGLE EVENT) =================
 const joinCache = new Set();
 const leaveCache = new Set();
 
@@ -149,10 +136,11 @@ client.on("guildMemberAdd", async (member) => {
   joinCache.add(member.id);
   setTimeout(() => joinCache.delete(member.id), 10000);
 
-  const channel = client.channels.cache.get(EINREISE_CHANNEL);
-  if (!channel) return;
+  // JOIN ROLE
+  member.roles.add(JOIN_ROLE).catch(() => {});
 
-  channel.send({
+  // EINREISE
+  client.channels.cache.get(EINREISE_CHANNEL)?.send({
     embeds: [
       new EmbedBuilder()
         .setTitle("🛬 Einreise")
@@ -160,7 +148,10 @@ client.on("guildMemberAdd", async (member) => {
         .setColor(0x00ff00)
         .setTimestamp()
     ]
-  }).catch(() => {});
+  });
+
+  // LOG
+  client.channels.cache.get(LOG_CHANNEL)?.send(`🟢 ${member.user.tag} gejoint`);
 });
 
 client.on("guildMemberRemove", async (member) => {
@@ -169,10 +160,8 @@ client.on("guildMemberRemove", async (member) => {
   leaveCache.add(member.id);
   setTimeout(() => leaveCache.delete(member.id), 10000);
 
-  const channel = client.channels.cache.get(AUSREISE_CHANNEL);
-  if (!channel) return;
-
-  channel.send({
+  // AUSREISE
+  client.channels.cache.get(AUSREISE_CHANNEL)?.send({
     embeds: [
       new EmbedBuilder()
         .setTitle("🛫 Ausreise")
@@ -180,7 +169,10 @@ client.on("guildMemberRemove", async (member) => {
         .setColor(0xff0000)
         .setTimestamp()
     ]
-  }).catch(() => {});
+  });
+
+  // LOG
+  client.channels.cache.get(LOG_CHANNEL)?.send(`🔴 ${member.user.tag} left`);
 });
 
 // ================= SPAM SYSTEM =================
@@ -315,44 +307,9 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
-// ================= LOG SYSTEM =================
-client.on("guildMemberAdd", async (member) => {
-
-  const channel = client.channels.cache.get(LOG_CHANNEL);
-  if (!channel) return;
-
-  channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setTitle("🟢 Mitglied gejoint")
-        .setColor(0x00ff00)
-        .setDescription(`${member.user.tag} ist dem Server beigetreten`)
-        .setThumbnail(member.user.displayAvatarURL())
-        .setTimestamp()
-    ]
-  });
-});
-
-client.on("guildMemberRemove", async (member) => {
-
-  const channel = client.channels.cache.get(LOG_CHANNEL);
-  if (!channel) return;
-
-  channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setTitle("🔴 Mitglied verlassen")
-        .setColor(0xff0000)
-        .setDescription(`${member.user.tag} hat den Server verlassen`)
-        .setThumbnail(member.user.displayAvatarURL())
-        .setTimestamp()
-    ]
-  });
-});
-
 // ================= EXTERNAL SYSTEMS =================
 require("./geo.js")(client);
 require("./notruf.js")(client);
 
 // ================= LOGIN =================
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN); 
