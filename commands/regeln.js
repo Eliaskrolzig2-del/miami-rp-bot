@@ -3,7 +3,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("
 module.exports = {
   name: "regeln",
 
-  async execute(message) {
+  async execute(message, client) {
 
     const image =
       "https://cdn.discordapp.com/attachments/1398233276203794432/1508424320223936553/E65801E0-03F0-47C6-8F89-47E1508D079D.png";
@@ -13,13 +13,7 @@ module.exports = {
       .setTitle("🌴 MIAMI ROLEPLAY | REGELWERK")
       .setColor(0x9b59b6)
       .setImage(image)
-      .setDescription(
-`📜 **Willkommen im Regelwerk**
-
-Bitte wähle eine Kategorie aus:
-
-⚠️ Dieses Menü ist nur für dich sichtbar.`
-      );
+      .setDescription("📜 **Willkommen im Regelwerk**");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -38,55 +32,50 @@ Bitte wähle eine Kategorie aus:
       components: [row]
     });
 
-    // ================= BUTTON HANDLER =================
-    const collector = msg.createMessageComponentCollector({ time: 600000 });
+    // ================= ONE FILE BUTTON HANDLER =================
+    if (!client.__regelnHandlerAdded) {
+      client.__regelnHandlerAdded = true;
 
-    collector.on("collect", async (interaction) => {
+      client.on("interactionCreate", async (interaction) => {
+        if (!interaction.isButton()) return;
 
-      if (!interaction.isButton()) return;
+        const image =
+          "https://cdn.discordapp.com/attachments/1398233276203794432/1508424320223936553/E65801E0-03F0-47C6-8F89-47E1508D079D.png";
 
-      const image =
-        "https://cdn.discordapp.com/attachments/1398233276203794432/1508424320223936553/E65801E0-03F0-47C6-8F89-47E1508D079D.png";
+        // ================= DISCORD REGELN =================
+        if (interaction.customId === "rules_discord") {
 
-      // ================= DISCORD =================
-      if (interaction.customId === "rules_discord") {
-
-        const embed = new EmbedBuilder()
-          .setTitle("💬 DISCORD REGELN")
-          .setColor(0x9b59b6)
-          .setThumbnail(image)
-          .setDescription(
-`1. Respektvoller Umgang ist Pflicht  
-2. Kein Spam oder Flooding  
+          const embed = new EmbedBuilder()
+            .setTitle("💬 DISCORD REGELN")
+            .setColor(0x9b59b6)
+            .setThumbnail(image)
+            .setDescription(
+`1. Respektvoller Umgang  
+2. Kein Spam  
 3. Keine Werbung  
-4. Keine NSFW Inhalte  
-5. Kein Hate / Beleidigungen  
-6. Team Anweisungen beachten  
-7. Support nur über Tickets  
+4. NSFW verboten  
+5. Kein Hate  
+6. Team Regeln beachten  
+7. Support nur Tickets  
 8. Keine Fake Accounts  
-9. Keine Provokationen  
-10. Kein unnötiges Pingen  
-11. Kein Server-Hating  
-12. Angemessene Sprache  
-13. Kein Mobbing  
-14. Keine Politik/Extremismus  
-15. Discord TOS einhalten`
-          );
+9. Kein Spam Pingen  
+10. Discord TOS einhalten`
+            );
 
-        return interaction.reply({
-          embeds: [embed],
-          ephemeral: true   // 🔥 NUR DIE PERSON SIEHT ES
-        });
-      }
+          return interaction.reply({
+            embeds: [embed],
+            ephemeral: true
+          });
+        }
 
-      // ================= INGAME =================
-      if (interaction.customId === "rules_ingame") {
+        // ================= INGAME REGELN =================
+        if (interaction.customId === "rules_ingame") {
 
-        const embed = new EmbedBuilder()
-          .setTitle("🎮 INGAME REGELN")
-          .setColor(0x9b59b6)
-          .setThumbnail(image)
-          .setDescription(
+          const embed = new EmbedBuilder()
+            .setTitle("🎮 INGAME REGELN")
+            .setColor(0x9b59b6)
+            .setThumbnail(image)
+            .setDescription(
 `1. FailRP verboten  
 2. RDM verboten  
 3. VDM verboten  
@@ -96,24 +85,15 @@ Bitte wähle eine Kategorie aus:
 7. NLR einhalten  
 8. Combat Logging verboten  
 9. Realistisches RP Pflicht  
-10. Kein Cop Baiting  
-11. Kein Car Ramming ohne RP  
-12. Keine unrealistischen Aktionen  
-13. Crime RP muss geplant sein  
-14. Keine Third Party  
-15. Voice RP korrekt  
-16. Kein Troll  
-17. Kein Fail Driving  
-18. Keine unrealistischen Waffen  
-19. Kein Bug Abuse  
-20. Admin Entscheidungen final`
-          );
+10. Kein Fail Driving`
+            );
 
-        return interaction.reply({
-          embeds: [embed],
-          ephemeral: true   // 🔥 nur der User sieht es
-        });
-      }
-    });
+          return interaction.reply({
+            embeds: [embed],
+            ephemeral: true
+          });
+        }
+      });
+    }
   }
 };

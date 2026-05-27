@@ -1,175 +1,301 @@
 const {
+  Client,
+  GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  Events
 } = require("discord.js");
 
+require("dotenv").config();
+
+const fs = require("fs");
+
+// ================= CONFIG =================
+const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = "1503380652777803838";
+const DB_FILE = "./kalender.json";
 
-let events = [];
-let panelSent = false;
-let listenerRegistered = false;
+// ================= CLIENT =================
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
 
-// =========================
-// EXPORT (OPTIONAL COMMAND SAFE)
-// =========================
-module.exports = {
-  name: "kalender",
-  execute: async () => {}
-};
+// ================= STORAGE =================
+function loadEvents() {
 
-// =========================
-// AUTO START PANEL (KEIN COMMAND)
-// =========================
-module.exports.start = (client) => {
+  try {
 
-  client.once("clientReady", async () => {
+    if (!fs.existsSync(DB_FILE)) {
+      fs.writeFileSync(DB_FILE, "[]");
+    }
 
-    if (panelSent) return;
+    return JSON.parse(
+      fs.readFileSync(DB_FILE, "utf8")
+    );
 
-    try {
+  } catch (err) {
 
-      const channel = await client.channels.fetch(CHANNEL_ID);
-      if (!channel) return console.log("❌ Kalender Channel nicht gefunden");
+    console.log("JSON Fehler:", err);
+    return [];
+  }
+}
 
-      panelSent = true;
+function saveEvents(data) {
 
-      const embed = new EmbedBuilder()
-        .setTitle("📅 MIAMI KALENDER")
-        .setColor(0x8e44ad)
-        .setDescription(
-`📌 Community Kalender System
+  fs.writeFileSync(
+    DB_FILE,
+    JSON.stringify(data, null, 2),
+    "utf8"
+  );
+}
 
-➕ Termin erstellen (für alle)  
-📋 Termine anzeigen  
+// ================= REMOVE EXPIRED =================
+function removeExpiredEvents() {
 
-⚠️ Aktiv für ganze Community`
-        );
+  let events = loadEvents();
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("cal_add")
-          .setLabel("➕ Termin erstellen")
-          .setStyle(ButtonStyle.Success),
+  const now = Date.now();
 
-        new ButtonBuilder()
-          .setCustomId("cal_list")
-          .setLabel("📋 Termine anzeigen")
-          .setStyle(ButtonStyle.Primary)
-      );
+  events = events.filter(e => {
 
-      await channel.send({
-        embeds: [embed],
-        components: [row]
+    return Number(e.endTimestamp) > now;
+  });
+
+  saveEvents(events);
+}
+
+// ================= FORMAT =================
+function formatEvents(events) {
+
+  if (!events.length) {
+    return "❌ Keine Termine vorhanden.";
+  }
+
+  let text = "";
+
+  events.forEach((e, i) => {
+
+    text +=
+`╔══════════════════╗
+📌 Termin #${i + 1}
+
+📝 Titel:
+${e.title}
+
+🕒 Beginn:
+${e.start}
+
+⌛ Ende:
+${e.end}
+
+📄 Beschreibung:
+${e.desc}
+╚══════════════════╝
+
+`;
+  });
+
+  return text;
+}
+
+// ================= PANEL MESSAGE =================
+let panelMessage = null;
+
+// ================= UPDATE PANEL =================
+async function updatePanel() {
+
+  removeExpiredEvents();
+
+  const events = loadEvents();
+
+  const embed = new EmbedBuilder()
+    .setTitle("📅 MIAMI KALENDER")
+    .setColor(0x8e44ad)
+    .setDescription(formatEvents(events))
+    .setFooter({
+      text: `Termine insgesamt: ${events.length}`
+    });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("cal_add")
+      .setLabel("➕ Termin erstellen")
+      .setStyle(ButtonStyle.Success)
+  );
+
+  if (!panelMessage) return;
+
+  await panelMessage.edit({
+    embeds: [embed],
+    components: [row]
+  });
+}
+
+// ================= READY =================
+client.once(Events.ClientReady, async () => {
+
+  console.log(`✅ Eingeloggt als ${client.user.tag}`);
+
+  try {
+
+    const channel = await client.channels.fetch(CHANNEL_ID);
+
+    if (!channel) {
+      return console.log("❌ Channel nicht gefunden");
+    }
+
+    removeExpiredEvents();
+
+    const embed = new EmbedBuilder()
+      .setTitle("📅 MIAMI KALENDER")
+      .setColor(0x8e44ad)
+      .setDescription(formatEvents(loadEvents()))
+      .setFooter({
+        text: `Termine insgesamt: ${loadEvents().length}`
       });
 
-      console.log("📅 Kalender AUTO START aktiv");
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("cal_add")
+        .setLabel("➕ Termin erstellen")
+        .setStyle(ButtonStyle.Success)
+    );
 
-    } catch (err) {
-      console.log("Kalender Start Error:", err);
-    }
-  });
-};
+    panelMessage = await channel.send({
+      embeds: [embed],
+      components: [row]
+    });
 
-// =========================
-// INTERACTIONS (NUR EINMAL)
-// =========================
-module.exports.interactions = (client) => {
+    console.log("📅 Kalender erfolgreich gestartet");
 
-  if (listenerRegistered) return;
-  listenerRegistered = true;
+    // ================= AUTO UPDATE =================
+    setInterval(async () => {
 
-  client.on("interactionCreate", async (interaction) => {
+      try {
 
-    try {
+        await updatePanel();
 
-      // =========================
-      // ➕ TERMIN ERSTELLEN
-      // =========================
-      if (interaction.isButton() && interaction.customId === "cal_add") {
+      } catch (err) {
 
-        const modal = new ModalBuilder()
-          .setCustomId("cal_create")
-          .setTitle("📅 Termin erstellen");
-
-        const title = new TextInputBuilder()
-          .setCustomId("title")
-          .setLabel("Titel")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const date = new TextInputBuilder()
-          .setCustomId("date")
-          .setLabel("Datum & Uhrzeit")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const desc = new TextInputBuilder()
-          .setCustomId("desc")
-          .setLabel("Beschreibung")
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true);
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(title),
-          new ActionRowBuilder().addComponents(date),
-          new ActionRowBuilder().addComponents(desc)
-        );
-
-        return interaction.showModal(modal);
+        console.log("Update Fehler:", err);
       }
 
-      // =========================
-      // 💾 SPEICHERN
-      // =========================
-      if (interaction.isModalSubmit() && interaction.customId === "cal_create") {
+    }, 60000);
 
-        const title = interaction.fields.getTextInputValue("title");
-        const date = interaction.fields.getTextInputValue("date");
-        const desc = interaction.fields.getTextInputValue("desc");
+  } catch (err) {
 
-        events.push({ title, date, desc });
+    console.log("Ready Fehler:", err);
+  }
+});
+
+// ================= INTERACTIONS =================
+client.on(Events.InteractionCreate, async (interaction) => {
+
+  try {
+
+    // ================= BUTTON =================
+    if (
+      interaction.isButton() &&
+      interaction.customId === "cal_add"
+    ) {
+
+      const modal = new ModalBuilder()
+        .setCustomId("cal_create")
+        .setTitle("📅 Termin erstellen");
+
+      const title = new TextInputBuilder()
+        .setCustomId("title")
+        .setLabel("Titel")
+        .setStyle(TextInputStyle.Short);
+
+      const start = new TextInputBuilder()
+        .setCustomId("start")
+        .setLabel("Start (YYYY-MM-DD HH:MM)")
+        .setStyle(TextInputStyle.Short);
+
+      const end = new TextInputBuilder()
+        .setCustomId("end")
+        .setLabel("Ende (YYYY-MM-DD HH:MM)")
+        .setStyle(TextInputStyle.Short);
+
+      const desc = new TextInputBuilder()
+        .setCustomId("desc")
+        .setLabel("Beschreibung")
+        .setStyle(TextInputStyle.Paragraph);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(title),
+        new ActionRowBuilder().addComponents(start),
+        new ActionRowBuilder().addComponents(end),
+        new ActionRowBuilder().addComponents(desc)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    // ================= SAVE EVENT =================
+    if (
+      interaction.isModalSubmit() &&
+      interaction.customId === "cal_create"
+    ) {
+
+      const events = loadEvents();
+
+      const title =
+        interaction.fields.getTextInputValue("title");
+
+      const start =
+        interaction.fields.getTextInputValue("start");
+
+      const end =
+        interaction.fields.getTextInputValue("end");
+
+      const desc =
+        interaction.fields.getTextInputValue("desc");
+
+      const endTimestamp = new Date(end).getTime();
+
+      if (isNaN(endTimestamp)) {
 
         return interaction.reply({
-          content: "✅ Termin erstellt!",
+          content:
+            "❌ Falsches Datum Format!\nBeispiel:\n2026-05-27 18:30",
           ephemeral: true
         });
       }
 
-      // =========================
-      // 📋 LISTE
-      // =========================
-      if (interaction.isButton() && interaction.customId === "cal_list") {
+      events.push({
+        title,
+        start,
+        end,
+        endTimestamp,
+        desc
+      });
 
-        if (events.length === 0) {
-          return interaction.reply({
-            content: "❌ Keine Termine vorhanden.",
-            ephemeral: true
-          });
-        }
+      saveEvents(events);
 
-        const list = events.map((e, i) =>
-`📌 ${i + 1}. ${e.title}
-🕒 ${e.date}
-📝 ${e.desc}`).join("\n\n");
+      await updatePanel();
 
-        return interaction.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("📅 TERMINE")
-              .setColor(0xff0000)
-              .setDescription(list)
-          ],
-          ephemeral: true
-        });
-      }
-
-    } catch (err) {
-      console.log("Interaction Error:", err);
+      return interaction.reply({
+        content: "✅ Termin erstellt!",
+        ephemeral: true
+      });
     }
-  });
-};
+
+  } catch (err) {
+
+    console.log("Interaction Fehler:", err);
+  }
+});
+
+// ================= ERROR HANDLER =================
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
+
+// ================= LOGIN =================
+client.login(TOKEN);

@@ -11,6 +11,8 @@ const {
   PermissionsBitField
 } = require("discord.js");
 
+let listenerRegistered = false;
+
 module.exports = {
   name: "ticket",
 
@@ -51,195 +53,194 @@ module.exports = {
       components: [menu]
     });
 
-    // ================= SINGLE EVENT =================
-    message.client.on("interactionCreate", async (interaction) => {
+    // ================= SAFE LISTENER =================
+    if (!listenerRegistered) {
 
-      // =====================================================
-      // 🎫 TICKET CREATE
-      // =====================================================
-      if (interaction.isStringSelectMenu() && interaction.customId === "ticket_create") {
+      listenerRegistered = true;
 
-        const type = interaction.values[0];
+      message.client.on("interactionCreate", async (interaction) => {
 
-        const channel = await interaction.guild.channels.create({
-          name: `ticket-${interaction.user.id}`,
-          type: ChannelType.GuildText,
-          permissionOverwrites: [
-            {
-              id: interaction.guild.id,
-              deny: [PermissionsBitField.Flags.ViewChannel]
-            },
-            {
-              id: interaction.user.id,
-              allow: [
-                PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.SendMessages,
-                PermissionsBitField.Flags.ReadMessageHistory
+        try {
+
+          // ================= TICKET CREATE =================
+          if (interaction.isStringSelectMenu() && interaction.customId === "ticket_create") {
+
+            const type = interaction.values[0];
+
+            const channel = await interaction.guild.channels.create({
+              name: `ticket-${interaction.user.id}`,
+              type: ChannelType.GuildText,
+              permissionOverwrites: [
+                {
+                  id: interaction.guild.id,
+                  deny: [PermissionsBitField.Flags.ViewChannel]
+                },
+                {
+                  id: interaction.user.id,
+                  allow: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.ReadMessageHistory
+                  ]
+                },
+                {
+                  id: supportRole,
+                  allow: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.ReadMessageHistory
+                  ]
+                }
               ]
-            },
-            {
-              id: supportRole,
-              allow: [
-                PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.SendMessages,
-                PermissionsBitField.Flags.ReadMessageHistory
-              ]
+            });
+
+            const log = interaction.guild.channels.cache.get(logChannelId);
+            if (log) log.send(`📩 Ticket | ${type} | <@${interaction.user.id}>`);
+
+            await interaction.reply({
+              content: `✅ Ticket erstellt: ${channel}`,
+              ephemeral: true
+            });
+
+            // ================= NORMAL =================
+            if (type !== "bewerbung") {
+
+              const embed = new EmbedBuilder()
+                .setTitle("🎫 SUPPORT TICKET")
+                .setColor(0xff0000)
+                .setDescription(`Kategorie: **${type}**`);
+
+              const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                  .setCustomId("ticket_close")
+                  .setLabel("🔒 Schließen")
+                  .setStyle(ButtonStyle.Danger)
+              );
+
+              return channel.send({
+                content: `<@&${supportRole}>`,
+                embeds: [embed],
+                components: [row]
+              });
             }
-          ]
-        });
 
-        const log = interaction.guild.channels.cache.get(logChannelId);
-        if (log) log.send(`📩 Ticket | ${type} | <@${interaction.user.id}>`);
+            // ================= BEWERBUNG =================
+            const questions = [
+              "👤 Wie heißt du?",
+              "🎂 Wie alt bist du?",
+              "📍 Woher kommst du?",
+              "🎮 Wie lange spielst du RP?",
+              "💼 Hast du Erfahrung?",
+              "🧠 Warum willst du auf den Server?",
+              "⚖️ Stärken?",
+              "📌 Warum dich?"
+            ];
 
-        await interaction.reply({
-          content: `✅ Ticket erstellt: ${channel}`,
-          ephemeral: true
-        });
+            let answers = [];
+            let i = 0;
 
-        // ================= NORMAL TICKETS =================
-        if (type !== "bewerbung") {
+            await channel.send("📄 Bewerbung gestartet!");
 
-          const embed = new EmbedBuilder()
-            .setTitle("🎫 SUPPORT TICKET")
-            .setColor(0xff0000)
-            .setDescription(`Kategorie: **${type}**`);
+            const ask = async () => {
 
-          const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId("ticket_close")
-              .setLabel("🔒 Schließen")
-              .setStyle(ButtonStyle.Danger)
-          );
+              if (i >= questions.length) {
 
-          return channel.send({
-            content: `<@&${supportRole}>`,
-            embeds: [embed],
-            components: [row]
-          });
-        }
-
-        // ================= BEWERBUNG =================
-        const questions = [
-          "👤 Wie heißt du?",
-          "🎂 Wie alt bist du?",
-          "📍 Woher kommst du?",
-          "🎮 Wie lange spielst du RP?",
-          "💼 Hast du Erfahrung?",
-          "🧠 Warum willst du auf den Server?",
-          "⚖️ Stärken?",
-          "📌 Warum dich?"
-        ];
-
-        let answers = [];
-        let i = 0;
-
-        await channel.send("📄 Bewerbung gestartet! Bitte beantworte alle Fragen nacheinander.");
-
-        const ask = async () => {
-
-          if (i >= questions.length) {
-
-            const embed = new EmbedBuilder()
-              .setTitle("📄 NEUE BEWERBUNG")
-              .setColor(0x9b59b6)
-              .setDescription(
+                const embed = new EmbedBuilder()
+                  .setTitle("📄 NEUE BEWERBUNG")
+                  .setColor(0x9b59b6)
+                  .setDescription(
 questions.map((q, index) =>
 `**${q}**\n➡️ ${answers[index]}`
 ).join("\n\n")
-              );
+                  );
 
-            const review = interaction.guild.channels.cache.get(reviewChannelId);
-            if (review) review.send({ embeds: [embed] });
+                const review = interaction.guild.channels.cache.get(reviewChannelId);
+                if (review) review.send({ embeds: [embed] });
 
-            return channel.send("✅ Bewerbung abgeschlossen!");
+                return channel.send("✅ Bewerbung abgeschlossen!");
+              }
+
+              await channel.send(`❓ ${questions[i]}`);
+
+              const collector = channel.createMessageCollector({
+                filter: m => m.author.id === interaction.user.id,
+                max: 1,
+                time: 600000
+              });
+
+              collector.on("collect", msg => {
+                answers.push(msg.content);
+                i++;
+                ask();
+              });
+            };
+
+            ask();
           }
 
-          await channel.send(`❓ ${questions[i]}`);
+          // ================= CLOSE =================
+          if (interaction.isButton() && interaction.customId === "ticket_close") {
 
-          const filter = m =>
-            m.author.id === interaction.user.id &&
-            !m.author.bot;
+            const modal = new ModalBuilder()
+              .setCustomId("ticket_feedback")
+              .setTitle("Ticket Bewertung");
 
-          const collector = channel.createMessageCollector({
-            filter,
-            max: 1,
-            time: 600000
-          });
+            const stars = new TextInputBuilder()
+              .setCustomId("stars")
+              .setLabel("Sterne (0-5)")
+              .setStyle(TextInputStyle.Short);
 
-          collector.on("collect", msg => {
-            answers.push(msg.content);
-            i++;
-            ask();
-          });
-        };
+            const reason = new TextInputBuilder()
+              .setCustomId("reason")
+              .setLabel("Grund")
+              .setStyle(TextInputStyle.Paragraph);
 
-        ask();
-      }
+            modal.addComponents(
+              new ActionRowBuilder().addComponents(stars),
+              new ActionRowBuilder().addComponents(reason)
+            );
 
-      // =====================================================
-      // 🔒 CLOSE
-      // =====================================================
-      if (interaction.isButton() && interaction.customId === "ticket_close") {
+            return interaction.showModal(modal);
+          }
 
-        const modal = new ModalBuilder()
-          .setCustomId("ticket_feedback")
-          .setTitle("Ticket Bewertung");
+          // ================= FEEDBACK =================
+          if (interaction.isModalSubmit() && interaction.customId === "ticket_feedback") {
 
-        const stars = new TextInputBuilder()
-          .setCustomId("stars")
-          .setLabel("Sterne (0-5)")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
+            const stars = interaction.fields.getTextInputValue("stars");
+            const reason = interaction.fields.getTextInputValue("reason");
 
-        const reason = new TextInputBuilder()
-          .setCustomId("reason")
-          .setLabel("Grund")
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true);
+            const feedback = interaction.guild.channels.cache.get("1489337816004563154");
 
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(stars),
-          new ActionRowBuilder().addComponents(reason)
-        );
+            if (feedback) {
+              feedback.send({
+                embeds: [
+                  new EmbedBuilder()
+                    .setTitle("🎫 TICKET BEWERTUNG")
+                    .setColor(0x9b59b6)
+                    .addFields(
+                      { name: "👤 User", value: `<@${interaction.user.id}>`, inline: true },
+                      { name: "⭐ Sterne", value: `${stars}/5`, inline: true },
+                      { name: "📝 Grund", value: reason }
+                    )
+                    .setTimestamp()
+                ]
+              });
+            }
 
-        await interaction.showModal(modal);
-      }
+            await interaction.reply({
+              content: "✅ Ticket wird geschlossen...",
+              ephemeral: true
+            });
 
-      // =====================================================
-      // ⭐ FEEDBACK
-      // =====================================================
-      if (interaction.isModalSubmit() && interaction.customId === "ticket_feedback") {
+            setTimeout(() => {
+              interaction.channel.delete().catch(() => {});
+            }, 3000);
+          }
 
-        const stars = interaction.fields.getTextInputValue("stars");
-        const reason = interaction.fields.getTextInputValue("reason");
-
-        const feedback = interaction.guild.channels.cache.get("1489337816004563154");
-
-        if (feedback) {
-          feedback.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("🎫 TICKET BEWERTUNG")
-                .setColor(0x9b59b6)
-                .addFields(
-                  { name: "👤 User", value: `<@${interaction.user.id}>`, inline: true },
-                  { name: "⭐ Sterne", value: `${stars}/5`, inline: true },
-                  { name: "📝 Grund", value: reason }
-                )
-                .setTimestamp()
-            ]
-          });
+        } catch (err) {
+          console.log("Ticket Error:", err);
         }
-
-        await interaction.reply({
-          content: "✅ Ticket wird geschlossen...",
-          ephemeral: true
-        });
-
-        setTimeout(() => {
-          interaction.channel.delete().catch(() => {});
-        }, 3000);
-      }
-    });
+      });
+    }
   }
 };

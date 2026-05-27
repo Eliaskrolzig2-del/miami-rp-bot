@@ -59,9 +59,13 @@ module.exports = (client) => {
     }
   ];
 
-  let active = null;
+  let active = false;
   let current = null;
   let messageRef = null;
+
+  // 🔒 SAFE GUARD (verhindert doppelte Listener bei Reload)
+  if (client.notrufQuizLoaded) return;
+  client.notrufQuizLoaded = true;
 
   async function sendQuestion() {
     const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
@@ -95,9 +99,10 @@ module.exports = (client) => {
   }
 
   client.on("interactionCreate", async (interaction) => {
+
     if (!interaction.isButton()) return;
     if (!interaction.customId.startsWith("notruf_")) return;
-    if (!active) return;
+    if (!active || !current) return;
 
     const index = Number(interaction.customId.split("_")[1]);
     const opt = current.options[index];
@@ -105,6 +110,7 @@ module.exports = (client) => {
     if (!opt) return;
 
     if (opt.correct) {
+
       active = false;
 
       await interaction.reply({
@@ -122,8 +128,14 @@ module.exports = (client) => {
     }
   });
 
+  // 🔒 READY SAFE (kein doppelter Start)
   client.once("ready", () => {
+
+    if (client.notrufQuizStarted) return;
+    client.notrufQuizStarted = true;
+
     console.log("🚀 Notruf Quiz startet...");
+
     setTimeout(sendQuestion, 3000);
   });
 

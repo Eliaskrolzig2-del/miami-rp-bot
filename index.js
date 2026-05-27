@@ -2,463 +2,357 @@ require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
 
-const app = express();
-
-// =========================
-// KEEP ALIVE FÜR RENDER
-// =========================
-app.get("/", (req, res) => {
-  res.send("Miami Bot läuft!");
-});
-
-app.listen(3000, () => {
-  console.log("🌐 Webserver läuft auf Port 3000");
-});
-
 const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
-  Partials,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Events,
-  PermissionsBitField
+  Partials,
+  Events
 } = require("discord.js");
 
-// =========================
-// CLIENT
-// =========================
+const {
+  joinVoiceChannel,
+  createAudioPlayer,
+  createAudioResource,
+  NoSubscriberBehavior
+} = require("@discordjs/voice");
+
+const gtts = require("gtts");
+const path = require("path");
+
+// ================= CHECK TOKEN =================
+if (!process.env.DISCORD_TOKEN) {
+  console.error("❌ DISCORD_TOKEN fehlt in .env");
+  process.exit(1);
+}
+
+// ================= EXPRESS =================
+const app = express();
+
+app.get("/", (_, res) => {
+  res.send("Bot läuft");
+});
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log("🌐 Webserver läuft");
+});
+
+// ================= CLIENT =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.GuildMember]
 });
 
-// =========================
-// IDS
-// =========================
-const JOIN_ROLE_ID = "1503365832842023005";
-const VERIFIED_ROLE_ID = "1503365888793907372";
+// ================= GLOBAL ERROR =================
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
 
-const VERIFY_CHANNEL_ID = "1489332015349235883";
-const WELCOME_CHANNEL_ID = "1489331791159496795";
-const LEAVE_CHANNEL_ID = "1489331930112462869";
+// ================= IDS =================
+const VERIFY_CHANNEL = "1489332015349235883";
+const JOIN_ROLE = "1503365832842023005";
+const VERIFIED_ROLE = "1503365888793907372";
 
-// =========================
-// COMMAND LOADER
-// =========================
+const WAITING_ROOM = "1489337872879321281";
+const LOG_CHANNEL = "1508498102200307873";
+
+const EINREISE_CHANNEL = "1489331791159496795";
+const AUSREISE_CHANNEL = "1489331930112462869";
+
+// ================= COMMANDS =================
 client.commands = new Map();
 
-const commandFiles = fs
-  .readdirSync("./commands")
-  .filter(file => file.endsWith(".js"));
-
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-
-  if (command.name && command.execute) {
-    client.commands.set(command.name, command);
-
-    console.log(`✔ geladen: ${command.name}`);
-  }
+try {
+  fs.readdirSync("./commands")
+    .filter(f => f.endsWith(".js"))
+    .forEach(file => {
+      const cmd = require(`./commands/${file}`);
+      if (cmd.name && cmd.execute) {
+        client.commands.set(cmd.name.toLowerCase(), cmd);
+        console.log(`✅ Command geladen: ${cmd.name}`);
+      }
+    });
+} catch (err) {
+  console.log("❌ Fehler beim Laden der Commands:", err);
 }
 
-// =========================
-// READY
-// =========================
-client.once("clientReady", async () => {
+// ================= READY =================
+client.once(Events.ClientReady, async () => {
 
   console.log(`🤖 Online als ${client.user.tag}`);
 
-  try {
+  const ch = await client.channels.fetch(VERIFY_CHANNEL).catch(() => null);
 
-    const channel = await client.channels.fetch(
-      VERIFY_CHANNEL_ID
+  if (ch) {
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("verify")
+        .setLabel("🔐 Verifizieren")
+        .setStyle(ButtonStyle.Success)
     );
-
-    if (!channel) return;
-
-    // Prüfen ob bereits Verify Nachricht existiert
-    const messages = await channel.messages.fetch({
-      limit: 10
-    });
-
-    const alreadyExists = messages.find(
-      msg =>
-        msg.author.id === client.user.id &&
-        msg.embeds.length > 0 &&
-        msg.embeds[0].title === "🔐 Verifizierung"
-    );
-
-    if (alreadyExists) {
-
-      console.log("ℹ️ Verify Nachricht existiert bereits");
-      return;
-
-    }
-
-    const row = new ActionRowBuilder()
-      .addComponents(
-
-        new ButtonBuilder()
-          .setCustomId("verify_button")
-          .setLabel("🔐 Verifizieren")
-          .setStyle(ButtonStyle.Success)
-
-      );
 
     const embed = new EmbedBuilder()
       .setTitle("🔐 Verifizierung")
-      .setDescription(
-        "Klicke auf den Button um dich zu verifizieren."
-      )
+      .setDescription("Klicke auf den Button um dich zu verifizieren")
       .setColor(0x00ff00);
 
-    await channel.send({
-      embeds: [embed],
-      components: [row]
-    });
-
-    console.log("✅ Verify Message gesendet");
-
-  } catch (err) {
-
-    console.log("READY ERROR:", err);
-
+    ch.send({ embeds: [embed], components: [row] });
   }
-
 });
 
-// =========================
-// JOIN SYSTEM
-// =========================
-client.on("guildMemberAdd", async (member) => {
+// ================= VERIFY =================
+client.on("interactionCreate", async (i) => {
+  if (!i.isButton()) return;
 
-  try {
+  if (i.customId === "verify") {
 
-    const role = member.guild.roles.cache.get(
-      JOIN_ROLE_ID
-    );
-
-    if (role) {
-
-      await member.roles.add(role);
-
-    }
-
-    const channel = member.guild.channels.cache.get(
-      WELCOME_CHANNEL_ID
-    );
-
-    if (!channel) return;
-
-    const embed = new EmbedBuilder()
-      .setTitle("🟢 EINREISE")
-      .setColor(0x00ff00)
-      .setThumbnail(
-        member.user.displayAvatarURL({
-          dynamic: true
-        })
-      )
-      .setDescription(
-        `👋 Willkommen ${member}\n\n👤 ${member.user.tag}\n👥 Member: ${member.guild.memberCount}`
-      )
-      .setTimestamp();
-
-    await channel.send({
-      embeds: [embed]
-    });
-
-  } catch (err) {
-
-    console.log("JOIN ERROR:", err);
-
-  }
-
-});
-
-// =========================
-// LEAVE SYSTEM
-// =========================
-client.on("guildMemberRemove", async (member) => {
-
-  try {
-
-    const channel = member.guild.channels.cache.get(
-      LEAVE_CHANNEL_ID
-    );
-
-    if (!channel) return;
-
-    const embed = new EmbedBuilder()
-      .setTitle("🔴 AUSREISE")
-      .setColor(0xff0000)
-      .setThumbnail(
-        member.user.displayAvatarURL({
-          dynamic: true
-        })
-      )
-      .setDescription(
-        `👋 ${member.user.tag} hat den Server verlassen\n\n👥 Member jetzt: ${member.guild.memberCount}`
-      )
-      .setTimestamp();
-
-    await channel.send({
-      embeds: [embed]
-    });
-
-  } catch (err) {
-
-    console.log("LEAVE ERROR:", err);
-
-  }
-
-});
-
-// =========================
-// VERIFY BUTTON
-// =========================
-client.on(Events.InteractionCreate, async (interaction) => {
-
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId !== "verify_button") return;
-
-  try {
-
-    await interaction.deferReply({
-      flags: 64
-    });
-
-    const role = interaction.guild.roles.cache.get(
-      VERIFIED_ROLE_ID
-    );
+    const role = i.guild.roles.cache.get(VERIFIED_ROLE);
 
     if (!role) {
-
-      return interaction.editReply({
-        content: "❌ Rolle nicht gefunden"
+      return i.reply({
+        content: "❌ Rolle nicht gefunden",
+        ephemeral: true
       });
-
     }
 
-    if (
-      interaction.member.roles.cache.has(
-        VERIFIED_ROLE_ID
-      )
-    ) {
+    await i.member.roles.add(role);
 
-      return interaction.editReply({
-        content: "✅ Bereits verifiziert."
-      });
+    return i.reply({
+      content: "✅ Du wurdest verifiziert",
+      ephemeral: true
+    });
+  }
+});
 
-    }
+// ================= JOIN ROLE =================
+client.on("guildMemberAdd", async (member) => {
+  member.roles.add(JOIN_ROLE).catch(() => {});
+});
 
-    await interaction.member.roles.add(role);
+// ================= 🔧 ONLY FIX: EIN-/AUSREISE DUPLICATE PROTECTION =================
+const joinCache = new Set();
+const leaveCache = new Set();
 
-    return interaction.editReply({
-      content: "✅ Erfolgreich verifiziert!"
+client.on("guildMemberAdd", async (member) => {
+
+  if (joinCache.has(member.id)) return;
+  joinCache.add(member.id);
+  setTimeout(() => joinCache.delete(member.id), 10000);
+
+  const channel = client.channels.cache.get(EINREISE_CHANNEL);
+  if (!channel) return;
+
+  channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("🛬 Einreise")
+        .setDescription(`${member.user.tag} ist eingereist`)
+        .setColor(0x00ff00)
+        .setTimestamp()
+    ]
+  }).catch(() => {});
+});
+
+client.on("guildMemberRemove", async (member) => {
+
+  if (leaveCache.has(member.id)) return;
+  leaveCache.add(member.id);
+  setTimeout(() => leaveCache.delete(member.id), 10000);
+
+  const channel = client.channels.cache.get(AUSREISE_CHANNEL);
+  if (!channel) return;
+
+  channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("🛫 Ausreise")
+        .setDescription(`${member.user.tag} hat verlassen`)
+        .setColor(0xff0000)
+        .setTimestamp()
+    ]
+  }).catch(() => {});
+});
+
+// ================= SPAM SYSTEM =================
+const spamMap = new Map();
+const punish = new Map();
+
+client.on("messageCreate", async (msg) => {
+
+  if (!msg.guild || msg.author.bot) return;
+
+  const id = msg.author.id;
+  const now = Date.now();
+
+  if (!spamMap.has(id)) spamMap.set(id, []);
+
+  spamMap.get(id).push(now);
+
+  const recent = spamMap.get(id).filter(t => now - t < 10000);
+  spamMap.set(id, recent);
+
+  if (recent.length < 3) return;
+
+  spamMap.set(id, []);
+
+  let level = punish.get(id) || 0;
+  level++;
+  punish.set(id, level);
+
+  if (level === 1) {
+    return msg.channel.send(`⚠️ ${msg.author} Bitte nicht spammen`);
+  }
+
+  if (!msg.member.moderatable) return;
+
+  if (level >= 2) {
+    await msg.member.timeout(5 * 60_000, "Spam");
+    return msg.channel.send(`⏰ ${msg.author} hat 5 Minuten Timeout wegen Spam bekommen`);
+  }
+});
+
+// ================= VOICE SYSTEM =================
+client.on("voiceStateUpdate", async (oldState, newState) => {
+
+  try {
+
+    if (newState.channelId !== WAITING_ROOM) return;
+    if (oldState.channelId === WAITING_ROOM) return;
+
+    const member = newState.member;
+
+    const log = client.channels.cache.get(LOG_CHANNEL);
+    log?.send(`🎧 ${member} ist im Warteraum`);
+
+    const connection = joinVoiceChannel({
+      channelId: newState.channel.id,
+      guildId: newState.guild.id,
+      adapterCreator: newState.guild.voiceAdapterCreator,
+      selfDeaf: false
+    });
+
+    const music = createAudioResource(
+      path.join(__dirname, "musik.mp3"),
+      { inlineVolume: true }
+    );
+
+    music.volume.setVolume(0.15);
+
+    const player = createAudioPlayer({
+      behaviors: { noSubscriber: NoSubscriberBehavior.Play }
+    });
+
+    player.play(music);
+    connection.subscribe(player);
+
+    const file = path.join(__dirname, "tts.mp3");
+
+    const tts = new gtts(
+      "Willkommen im Miami Roleplay Support. Bitte warten.",
+      "de"
+    );
+
+    tts.save(file, () => {
+
+      setTimeout(() => {
+
+        const speech = createAudioResource(file);
+        const speechPlayer = createAudioPlayer();
+
+        speechPlayer.play(speech);
+        connection.subscribe(speechPlayer);
+
+      }, 2000);
+
     });
 
   } catch (err) {
-
-    console.log("VERIFY ERROR:", err);
-
+    console.log("VOICE ERROR:", err);
   }
-
 });
 
-// =========================
-// ANTI SPAM SYSTEM
-// =========================
-const userMessages = new Map();
-const punishments = new Map();
+// ================= COMMAND HANDLER =================
+client.on("messageCreate", async (msg) => {
 
-// Cleanup
-setInterval(() => {
+  if (!msg.guild || msg.author.bot) return;
+  if (!msg.content.startsWith("!")) return;
 
-  userMessages.clear();
+  const args = msg.content.slice(1).trim().split(/ +/);
+  const cmdName = args.shift().toLowerCase();
 
-}, 60 * 60 * 1000);
+  if (cmdName === "commands") {
 
-setInterval(() => {
+    const list = [...client.commands.keys()]
+      .map(c => `\`${c}\``)
+      .join(", ");
 
-  punishments.clear();
+    const embed = new EmbedBuilder()
+      .setTitle("📜 Commands")
+      .setDescription(list || "Keine Commands gefunden")
+      .setColor(0x00ff00);
 
-}, 24 * 60 * 60 * 1000);
+    return msg.channel.send({ embeds: [embed] });
+  }
 
-client.on("messageCreate", async (message) => {
+  const command = client.commands.get(cmdName);
+  if (!command) return;
 
   try {
-
-    if (!message.guild) return;
-    if (message.author.bot) return;
-
-    if (
-      message.member.permissions.has(
-        PermissionsBitField.Flags.Administrator
-      )
-    ) return;
-
-    const userId = message.author.id;
-    const now = Date.now();
-
-    if (!userMessages.has(userId)) {
-
-      userMessages.set(userId, []);
-
-    }
-
-    let messages = userMessages.get(userId);
-
-    messages.push(now);
-
-    messages = messages.filter(
-      t => now - t < 10000
-    );
-
-    userMessages.set(userId, messages);
-
-    if (messages.length < 3) return;
-
-    userMessages.set(userId, []);
-
-    let level = punishments.get(userId) || 0;
-
-    level++;
-
-    punishments.set(userId, level);
-
-    // Warnung
-    if (level === 1) {
-
-      return message.channel.send(
-        `⚠️ ${message.author} hör auf zu spammen!`
-      );
-
-    }
-
-    // Prüfen ob timeout möglich
-    if (!message.member.moderatable) return;
-
-    // 60 Sek
-    if (level === 2) {
-
-      await message.member.timeout(
-        60 * 1000,
-        "Spam"
-      );
-
-      return message.channel.send(
-        `⏰ ${message.author} hat 60 Sekunden Timeout bekommen`
-      );
-
-    }
-
-    // 5 Min
-    if (level === 3) {
-
-      await message.member.timeout(
-        5 * 60 * 1000,
-        "Spam"
-      );
-
-      return message.channel.send(
-        `🔇 ${message.author} hat 5 Minuten Timeout bekommen`
-      );
-
-    }
-
-    // 10 Min
-    await message.member.timeout(
-      10 * 60 * 1000,
-      "Spam"
-    );
-
-    return message.channel.send(
-      `🚨 ${message.author} hat 10 Minuten Timeout bekommen`
-    );
-
+    await command.execute(msg, args, client);
   } catch (err) {
-
-    console.log("SPAM ERROR:", err);
-
+    console.log(`❌ Fehler bei Command ${cmdName}:`, err);
+    msg.channel.send("❌ Fehler beim Ausführen des Commands");
   }
-
 });
 
-// =========================
-// COMMAND SYSTEM
-// =========================
-client.on("messageCreate", async (message) => {
+// ================= LOG SYSTEM =================
+client.on("guildMemberAdd", async (member) => {
 
-  try {
+  const channel = client.channels.cache.get(LOG_CHANNEL);
+  if (!channel) return;
 
-    if (!message.guild) return;
-    if (message.author.bot) return;
-
-    if (!message.content.startsWith("!")) return;
-
-    const args = message.content
-      .slice(1)
-      .trim()
-      .split(/ +/);
-
-    const cmdName = args.shift().toLowerCase();
-
-    const command = client.commands.get(
-      cmdName
-    );
-
-    if (!command) return;
-
-    await command.execute(
-      message,
-      args,
-      client
-    );
-
-  } catch (err) {
-
-    console.log("COMMAND ERROR:", err);
-
-  }
-
+  channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("🟢 Mitglied gejoint")
+        .setColor(0x00ff00)
+        .setDescription(`${member.user.tag} ist dem Server beigetreten`)
+        .setThumbnail(member.user.displayAvatarURL())
+        .setTimestamp()
+    ]
+  });
 });
 
-// =========================
-// SYSTEMS
-// =========================
+client.on("guildMemberRemove", async (member) => {
+
+  const channel = client.channels.cache.get(LOG_CHANNEL);
+  if (!channel) return;
+
+  channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("🔴 Mitglied verlassen")
+        .setColor(0xff0000)
+        .setDescription(`${member.user.tag} hat den Server verlassen`)
+        .setThumbnail(member.user.displayAvatarURL())
+        .setTimestamp()
+    ]
+  });
+});
+
+// ================= EXTERNAL SYSTEMS =================
 require("./geo.js")(client);
 require("./notruf.js")(client);
 
-// =========================
-// ERROR PROTECTION
-// =========================
-process.on(
-  "unhandledRejection",
-  console.log
-);
-
-process.on(
-  "uncaughtException",
-  console.log
-);
-
-client.on(
-  "error",
-  console.error
-);
-
-// =========================
-// LOGIN
-// =========================
-client.login(
-  process.env.DISCORD_TOKEN
-);
+// ================= LOGIN =================
+client.login(process.env.DISCORD_TOKEN);

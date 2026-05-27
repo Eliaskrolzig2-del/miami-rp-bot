@@ -20,8 +20,12 @@ module.exports = (client) => {
   let activeAnswer = null;
   let locked = false;
 
+  // 🔒 PREVENT DUPLICATE LOAD (24/7 SAFE)
+  if (client.geoguessrLoaded) return;
+  client.geoguessrLoaded = true;
+
   // =========================
-  // START ROUND (SAFE)
+  // START ROUND
   // =========================
   async function startRound() {
     if (locked) return;
@@ -54,35 +58,43 @@ module.exports = (client) => {
   }
 
   // =========================
-  // MESSAGE HANDLER (SAFE)
+  // MESSAGE HANDLER (SAFE ONCE)
   // =========================
-  client.on("messageCreate", async (message) => {
+  if (!client.geoguessrMsgHandler) {
+    client.geoguessrMsgHandler = true;
 
-    if (message.author.bot) return;
-    if (message.channel.id !== CHANNEL_ID) return;
-    if (!activeAnswer) return;
+    client.on("messageCreate", async (message) => {
 
-    const guess = message.content.toLowerCase().trim();
+      if (message.author.bot) return;
+      if (message.channel.id !== CHANNEL_ID) return;
+      if (!activeAnswer) return;
 
-    if (guess !== activeAnswer) return;
+      const guess = message.content.toLowerCase().trim();
 
-    activeAnswer = null;
+      if (guess !== activeAnswer) return;
 
-    try {
-      await message.react("✅");
-    } catch {}
+      activeAnswer = null;
 
-    await message.channel.send(`🎉 Richtig ${message.author.username}!`);
+      try {
+        await message.react("✅");
+      } catch {}
 
-    setTimeout(() => {
-      startRound();
-    }, 3000);
-  });
+      await message.channel.send(`🎉 Richtig ${message.author.username}!`);
+
+      setTimeout(() => {
+        startRound();
+      }, 3000);
+    });
+  }
 
   // =========================
-  // READY
+  // READY (SAFE ONLY ONCE)
   // =========================
   client.once("ready", () => {
+
+    if (client.geoguessrStarted) return;
+    client.geoguessrStarted = true;
+
     console.log("🚀 GeoGuessr startet...");
 
     setTimeout(() => {
