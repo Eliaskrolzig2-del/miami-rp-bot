@@ -9,6 +9,10 @@ const {
 
 const path = require("path");
 
+// ================= RENDER SAFE GUARD =================
+if (global.__warteraum_loaded__) return;
+global.__warteraum_loaded__ = true;
+
 module.exports = (client) => {
 
     console.log("📦 Warteraum System geladen");
@@ -18,6 +22,7 @@ module.exports = (client) => {
 
     let connection = null;
     let musicPlayer = null;
+    let connecting = false;
 
     client.on("voiceStateUpdate", async (oldState, newState) => {
 
@@ -42,54 +47,52 @@ module.exports = (client) => {
                 const log = client.channels.cache.get(LOG_CHANNEL_ID);
                 log?.send(`🎧 ${member} im Warteraum`);
 
-                // ================= SUPPORT ZEITEN =================
                 const supportTimes =
 `🕒 Supportzeiten:
 Mo–Fr: 16–20 Uhr
 Sa: 12–22 Uhr
 So: 12–20 Uhr`;
 
-                // ================= DM =================
+                // DM
                 try {
-                    await member.send(
-`👋 Willkommen im Support!
-
-${supportTimes}`
-                    );
-
-                    console.log("📩 DM gesendet");
-
-                } catch (err) {
-                    console.log("❌ DM blockiert");
-
+                    await member.send(`👋 Willkommen im Support!\n\n${supportTimes}`);
+                } catch {
                     log?.send(`⚠️ <@${member.id}> keine DM möglich\n\n${supportTimes}`);
                 }
 
-                // ================= VOICE JOIN =================
-                connection = joinVoiceChannel({
-                    channelId: WAITING_ROOM_ID,
-                    guildId: newState.guild.id,
-                    adapterCreator: newState.guild.voiceAdapterCreator,
-                    selfDeaf: false
-                });
+                // ================= SAFE VOICE CONNECT =================
+                if (!connection || connection.state.status === "destroyed") {
 
-                await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+                    if (connecting) return;
+                    connecting = true;
 
-                // ================= MUSIC =================
-                const musicPath = path.join(__dirname, "musik.mp3");
+                    connection = joinVoiceChannel({
+                        channelId: newState.channel.id,
+                        guildId: newState.guild.id,
+                        adapterCreator: newState.guild.voiceAdapterCreator,
+                        selfDeaf: false
+                    });
 
-                musicPlayer = createAudioPlayer({
-                    behaviors: {
-                        noSubscriber: NoSubscriberBehavior.Play
-                    }
-                });
+                    await entersState(connection, VoiceConnectionStatus.Ready, 15000)
+                        .catch(() => null);
 
-                const music = createAudioResource(musicPath);
+                    connecting = false;
 
-                musicPlayer.play(music);
-                connection.subscribe(musicPlayer);
+                    const musicPath = path.join(__dirname, "musik.mp3");
 
-                console.log("🎵 Musik läuft");
+                    musicPlayer = createAudioPlayer({
+                        behaviors: {
+                            noSubscriber: NoSubscriberBehavior.Play
+                        }
+                    });
+
+                    const music = createAudioResource(musicPath);
+
+                    musicPlayer.play(music);
+                    connection.subscribe(musicPlayer);
+
+                    console.log("🎵 Musik läuft");
+                }
             }
 
             // ================= LEAVE =================

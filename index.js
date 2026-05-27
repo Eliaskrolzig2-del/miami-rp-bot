@@ -17,30 +17,37 @@ const {
   joinVoiceChannel,
   createAudioPlayer,
   createAudioResource,
-  NoSubscriberBehavior
+  NoSubscriberBehavior,
+  entersState,
+  VoiceConnectionStatus
 } = require("@discordjs/voice");
 
 const gtts = require("gtts");
 const path = require("path");
 
-// ================= CHECK TOKEN =================
+/* ================= RENDER SAFETY ================= */
+if (global.__MIAMI_BOT__) {
+  console.log("⚠️ Bot already running (duplicate prevented)");
+} else {
+  global.__MIAMI_BOT__ = true;
+}
+
+/* ================= CHECK TOKEN ================= */
 if (!process.env.DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN fehlt in .env");
   process.exit(1);
 }
 
-// ================= EXPRESS =================
+/* ================= EXPRESS ================= */
 const app = express();
 
-app.get("/", (_, res) => {
-  res.send("Bot läuft");
-});
+app.get("/", (_, res) => res.send("Bot läuft"));
 
 app.listen(process.env.PORT || 3000, () => {
   console.log("🌐 Webserver läuft");
 });
 
-// ================= CLIENT =================
+/* ================= CLIENT ================= */
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -53,11 +60,11 @@ const client = new Client({
   partials: [Partials.GuildMember]
 });
 
-// ================= GLOBAL ERROR =================
+/* ================= ERROR HANDLING ================= */
 process.on("unhandledRejection", console.error);
 process.on("uncaughtException", console.error);
 
-// ================= IDS =================
+/* ================= IDS ================= */
 const VERIFY_CHANNEL = "1489332015349235883";
 const JOIN_ROLE = "1503365832842023005";
 const VERIFIED_ROLE = "1503365888793907372";
@@ -68,7 +75,7 @@ const LOG_CHANNEL = "1508498102200307873";
 const EINREISE_CHANNEL = "1489331791159496795";
 const AUSREISE_CHANNEL = "1489331930112462869";
 
-// ================= COMMANDS =================
+/* ================= COMMANDS ================= */
 client.commands = new Map();
 
 try {
@@ -82,12 +89,11 @@ try {
       }
     });
 } catch (err) {
-  console.log("❌ Fehler beim Laden der Commands:", err);
+  console.log("❌ Command Fehler:", err);
 }
 
-// ================= READY =================
+/* ================= READY ================= */
 client.once(Events.ClientReady, async () => {
-
   console.log(`🤖 Online als ${client.user.tag}`);
 
   const ch = await client.channels.fetch(VERIFY_CHANNEL).catch(() => null);
@@ -109,37 +115,33 @@ client.once(Events.ClientReady, async () => {
   }
 });
 
-// ================= VERIFY =================
+/* ================= VERIFY ================= */
 client.on("interactionCreate", async (i) => {
   if (!i.isButton()) return;
 
   if (i.customId === "verify") {
     const role = i.guild.roles.cache.get(VERIFIED_ROLE);
 
-    if (!role) {
-      return i.reply({ content: "❌ Rolle nicht gefunden", ephemeral: true });
-    }
+    if (!role) return i.reply({ content: "❌ Rolle nicht gefunden", ephemeral: true });
 
     await i.member.roles.add(role);
-
     return i.reply({ content: "✅ Du wurdest verifiziert", ephemeral: true });
   }
 });
 
-// ================= JOIN ROLE + EIN/AUSREISE + LOG (FIXED SINGLE EVENT) =================
-const joinCache = new Set();
-const leaveCache = new Set();
+/* ================= CACHE FIX ================= */
+const joinCache = new Map();
+const leaveCache = new Map();
 
+/* ================= JOIN / LEAVE / EIN-AUSREISE ================= */
 client.on("guildMemberAdd", async (member) => {
 
   if (joinCache.has(member.id)) return;
-  joinCache.add(member.id);
+  joinCache.set(member.id, Date.now());
   setTimeout(() => joinCache.delete(member.id), 10000);
 
-  // JOIN ROLE
   member.roles.add(JOIN_ROLE).catch(() => {});
 
-  // EINREISE
   client.channels.cache.get(EINREISE_CHANNEL)?.send({
     embeds: [
       new EmbedBuilder()
@@ -150,17 +152,15 @@ client.on("guildMemberAdd", async (member) => {
     ]
   });
 
-  // LOG
   client.channels.cache.get(LOG_CHANNEL)?.send(`🟢 ${member.user.tag} gejoint`);
 });
 
 client.on("guildMemberRemove", async (member) => {
 
   if (leaveCache.has(member.id)) return;
-  leaveCache.add(member.id);
+  leaveCache.set(member.id, Date.now());
   setTimeout(() => leaveCache.delete(member.id), 10000);
 
-  // AUSREISE
   client.channels.cache.get(AUSREISE_CHANNEL)?.send({
     embeds: [
       new EmbedBuilder()
@@ -171,11 +171,10 @@ client.on("guildMemberRemove", async (member) => {
     ]
   });
 
-  // LOG
   client.channels.cache.get(LOG_CHANNEL)?.send(`🔴 ${member.user.tag} left`);
 });
 
-// ================= SPAM SYSTEM =================
+/* ================= SPAM SYSTEM ================= */
 const spamMap = new Map();
 const punish = new Map();
 
@@ -209,71 +208,87 @@ client.on("messageCreate", async (msg) => {
 
   if (level >= 2) {
     await msg.member.timeout(5 * 60_000, "Spam");
-    return msg.channel.send(`⏰ ${msg.author} hat 5 Minuten Timeout wegen Spam bekommen`);
+    return msg.channel.send(`⏰ ${msg.author} Timeout wegen Spam`);
   }
 });
 
-// ================= VOICE SYSTEM =================
+/* ================= VOICE SYSTEM (SAFE) ================= */
+let connection = null;
+let musicPlayer = null;
+let connecting = false;
+
 client.on("voiceStateUpdate", async (oldState, newState) => {
 
   try {
 
-    if (newState.channelId !== WAITING_ROOM) return;
-    if (oldState.channelId === WAITING_ROOM) return;
+    const joined =
+      newState.channelId === WAITING_ROOM &&
+      oldState.channelId !== WAITING_ROOM;
 
-    const member = newState.member;
+    const left =
+      oldState.channelId === WAITING_ROOM &&
+      newState.channelId !== WAITING_ROOM;
 
-    const log = client.channels.cache.get(LOG_CHANNEL);
-    log?.send(`🎧 ${member} ist im Warteraum`);
+    if (joined) {
 
-    const connection = joinVoiceChannel({
-      channelId: newState.channel.id,
-      guildId: newState.guild.id,
-      adapterCreator: newState.guild.voiceAdapterCreator,
-      selfDeaf: false
-    });
+      const member = newState.member;
+      if (!member) return;
 
-    const music = createAudioResource(
-      path.join(__dirname, "musik.mp3"),
-      { inlineVolume: true }
-    );
+      const log = client.channels.cache.get(LOG_CHANNEL);
+      log?.send(`🎧 ${member} im Warteraum`);
 
-    music.volume.setVolume(0.15);
+      if (!connection && !connecting) {
 
-    const player = createAudioPlayer({
-      behaviors: { noSubscriber: NoSubscriberBehavior.Play }
-    });
+        connecting = true;
 
-    player.play(music);
-    connection.subscribe(player);
+        connection = joinVoiceChannel({
+          channelId: newState.channel.id,
+          guildId: newState.guild.id,
+          adapterCreator: newState.guild.voiceAdapterCreator,
+          selfDeaf: false
+        });
 
-    const file = path.join(__dirname, "tts.mp3");
+        await entersState(connection, VoiceConnectionStatus.Ready, 15000)
+          .catch(() => null);
 
-    const tts = new gtts(
-      "Willkommen im Miami Roleplay Support. Bitte warten.",
-      "de"
-    );
+        connecting = false;
 
-    tts.save(file, () => {
+        const music = createAudioResource(
+          path.join(__dirname, "musik.mp3"),
+          { inlineVolume: true }
+        );
 
-      setTimeout(() => {
+        music.volume.setVolume(0.15);
 
-        const speech = createAudioResource(file);
-        const speechPlayer = createAudioPlayer();
+        musicPlayer = createAudioPlayer({
+          behaviors: { noSubscriber: NoSubscriberBehavior.Play }
+        });
 
-        speechPlayer.play(speech);
-        connection.subscribe(speechPlayer);
+        musicPlayer.play(music);
+        connection.subscribe(musicPlayer);
+      }
+    }
 
-      }, 2000);
+    if (left) {
 
-    });
+      const channel = oldState.channel;
+      if (!channel) return;
+
+      const humans = channel.members.filter(m => !m.user.bot);
+
+      if (humans.size === 0 && connection) {
+        connection.destroy();
+        connection = null;
+        musicPlayer = null;
+      }
+    }
 
   } catch (err) {
     console.log("VOICE ERROR:", err);
   }
 });
 
-// ================= COMMAND HANDLER =================
+/* ================= COMMAND HANDLER ================= */
 client.on("messageCreate", async (msg) => {
 
   if (!msg.guild || msg.author.bot) return;
@@ -283,17 +298,16 @@ client.on("messageCreate", async (msg) => {
   const cmdName = args.shift().toLowerCase();
 
   if (cmdName === "commands") {
+    const list = [...client.commands.keys()].map(c => `\`${c}\``).join(", ");
 
-    const list = [...client.commands.keys()]
-      .map(c => `\`${c}\``)
-      .join(", ");
-
-    const embed = new EmbedBuilder()
-      .setTitle("📜 Commands")
-      .setDescription(list || "Keine Commands gefunden")
-      .setColor(0x00ff00);
-
-    return msg.channel.send({ embeds: [embed] });
+    return msg.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("📜 Commands")
+          .setDescription(list || "Keine Commands")
+          .setColor(0x00ff00)
+      ]
+    });
   }
 
   const command = client.commands.get(cmdName);
@@ -302,14 +316,14 @@ client.on("messageCreate", async (msg) => {
   try {
     await command.execute(msg, args, client);
   } catch (err) {
-    console.log(`❌ Fehler bei Command ${cmdName}:`, err);
-    msg.channel.send("❌ Fehler beim Ausführen des Commands");
+    console.log(err);
+    msg.channel.send("❌ Fehler beim Command");
   }
 });
 
-// ================= EXTERNAL SYSTEMS =================
+/* ================= EXTERNAL SYSTEMS ================= */
 require("./geo.js")(client);
 require("./notruf.js")(client);
 
-// ================= LOGIN =================
-client.login(process.env.DISCORD_TOKEN); 
+/* ================= LOGIN ================= */
+client.login(process.env.DISCORD_TOKEN);
