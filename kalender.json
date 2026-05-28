@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "title": "Meeting",
+    "start": "2027.05.27 18:30",
+    "end": "2027.05.27 19:00",
+    "endTimestamp": 1811437200000,
+    "desc": "Heute findet ein Meeting statt, bitte kommen!"
+  }
+]

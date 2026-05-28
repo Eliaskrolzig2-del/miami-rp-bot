@@ -1,6 +1,8 @@
+const { EmbedBuilder } = require("discord.js");
+
 module.exports = (client) => {
 
-  console.log("📦 GeoGuessr geladen");
+  console.log("📦 GeoGuessr 24/7 geladen");
 
   const CHANNEL_ID = "1507851827004178583";
 
@@ -17,89 +19,105 @@ module.exports = (client) => {
     { name: "grenze", image: "https://cdn.discordapp.com/attachments/1503481883798016154/1508528296651128962/image.png" }
   ];
 
-  let activeAnswer = null;
-  let locked = false;
+  if (!client.geo) {
+    client.geo = {
+      activeAnswer: null,
+      running: false
+    };
+  }
 
-  // 🔒 PREVENT DUPLICATE LOAD (24/7 SAFE)
-  if (client.geoguessrLoaded) return;
-  client.geoguessrLoaded = true;
-
-  // =========================
-  // START ROUND
-  // =========================
   async function startRound() {
-    if (locked) return;
-    locked = true;
+
+    if (client.geo.running) return;
+
+    client.geo.running = true;
 
     try {
+
       const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
+
       if (!channel) {
-        locked = false;
-        return console.log("❌ Geo Channel nicht gefunden");
+        console.log("❌ Geo Channel nicht gefunden");
+        client.geo.running = false;
+        return;
       }
 
       const loc = locations[Math.floor(Math.random() * locations.length)];
-      activeAnswer = loc.name.toLowerCase().trim();
 
-      await channel.send({
-        embeds: [{
-          title: "🌍 GeoGuessr",
-          description: "Schreibe den richtigen Ort in den Chat!",
-          image: { url: loc.image },
-          color: 0x00ff00
-        }]
-      });
+      client.geo.activeAnswer = loc.name.toLowerCase();
+
+      console.log("🎯 Lösung:", client.geo.activeAnswer);
+
+      const safeImage = `${loc.image}?v=${Date.now()}`;
+
+      const embed = new EmbedBuilder()
+        .setTitle("🌍 GeoGuessr")
+        .setDescription("Schreibe den richtigen Ort in den Chat!")
+        .setImage(safeImage)
+        .setColor(0x00ff00);
+
+      await channel.send({ embeds: [embed] });
+
+      console.log("✅ Runde gestartet");
 
     } catch (err) {
-      console.log("GEO ERROR:", err);
+      console.log("❌ Round Error:", err);
     }
 
-    locked = false;
+    client.geo.running = false;
   }
 
-  // =========================
-  // MESSAGE HANDLER (SAFE ONCE)
-  // =========================
-  if (!client.geoguessrMsgHandler) {
-    client.geoguessrMsgHandler = true;
+  if (!client.geoHandler) {
+
+    client.geoHandler = true;
 
     client.on("messageCreate", async (message) => {
 
-      if (message.author.bot) return;
-      if (message.channel.id !== CHANNEL_ID) return;
-      if (!activeAnswer) return;
-
-      const guess = message.content.toLowerCase().trim();
-
-      if (guess !== activeAnswer) return;
-
-      activeAnswer = null;
-
       try {
-        await message.react("✅");
-      } catch {}
 
-      await message.channel.send(`🎉 Richtig ${message.author.username}!`);
+        if (message.author.bot) return;
+        if (message.channel.id !== CHANNEL_ID) return;
 
-      setTimeout(() => {
-        startRound();
-      }, 3000);
+        if (!client.geo.activeAnswer) return;
+
+        const guess = message.content.toLowerCase().trim();
+
+        if (!guess.includes(client.geo.activeAnswer)) return;
+
+        client.geo.activeAnswer = null;
+
+        try {
+          await message.react("✅");
+        } catch {}
+
+        await message.channel.send(`🎉 Richtig ${message.author.username}!`);
+
+        setTimeout(() => startRound(), 4000);
+
+      } catch (err) {
+        console.log("❌ Message Error:", err);
+      }
+
     });
   }
 
-  // =========================
-  // READY (SAFE ONLY ONCE)
-  // =========================
-  client.once("ready", () => {
+  client.once("ready", async () => {
 
-    if (client.geoguessrStarted) return;
-    client.geoguessrStarted = true;
-
-    console.log("🚀 GeoGuessr startet...");
+    console.log("🚀 GeoGuessr 24/7 startet...");
 
     setTimeout(() => {
       startRound();
-    }, 3000);
+    }, 5000);
+
+    setInterval(() => {
+
+      if (!client.geo.activeAnswer && !client.geo.running) {
+        console.log("♻️ Auto-Recovery Trigger");
+        startRound();
+      }
+
+    }, 1000 * 60 * 5);
+
   });
 
 };

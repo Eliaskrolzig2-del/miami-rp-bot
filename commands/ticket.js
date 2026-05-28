@@ -22,11 +22,13 @@ module.exports = {
     const logChannelId = "1508498102200307873";
     const reviewChannelId = "1504090675074044066";
 
+    const panelChannelId = "1489337749587890338";
+
     // ================= PANEL =================
     const panel = new EmbedBuilder()
       .setTitle("🎫 MIAMI-SUPPORT")
       .setColor(0x8e44ad)
-      .setImage("https://media.discordapp.net/attachments/1503481883798016154/1508405228985389278/file_00000000e89c71f48ac2f4c39c92dc73.png")
+      .setImage("https://cdn.discordapp.com/attachments/1503380317732606073/1509467517897281566/file_00000000e89c71f48ac2f4c39c92dc73.png?ex=6a1948ac&is=6a17f72c&hm=a1f443114049db264903d957c7008a9e6d7af9a0722346013a289249542638cc&")
       .setDescription(
 `📊 Auslastung: Normal
 
@@ -48,12 +50,21 @@ module.exports = {
         )
     );
 
-    await message.channel.send({
-      embeds: [panel],
-      components: [menu]
-    });
+    // ================= SEND PANEL =================
+    const panelChannel = await message.guild.channels
+      .fetch(panelChannelId)
+      .catch(() => null);
 
-    // ================= SAFE LISTENER =================
+    if (panelChannel) {
+      await panelChannel.send({
+        embeds: [panel],
+        components: [menu]
+      });
+    } else {
+      console.log("❌ Panel Channel nicht gefunden oder keine Rechte!");
+    }
+
+    // ================= LISTENER =================
     if (!listenerRegistered) {
 
       listenerRegistered = true;
@@ -62,7 +73,7 @@ module.exports = {
 
         try {
 
-          // ================= TICKET CREATE =================
+          // CREATE TICKET
           if (interaction.isStringSelectMenu() && interaction.customId === "ticket_create") {
 
             const type = interaction.values[0];
@@ -102,7 +113,6 @@ module.exports = {
               ephemeral: true
             });
 
-            // ================= NORMAL =================
             if (type !== "bewerbung") {
 
               const embed = new EmbedBuilder()
@@ -178,7 +188,7 @@ questions.map((q, index) =>
             ask();
           }
 
-          // ================= CLOSE =================
+          // CLOSE
           if (interaction.isButton() && interaction.customId === "ticket_close") {
 
             const modal = new ModalBuilder()
@@ -203,7 +213,7 @@ questions.map((q, index) =>
             return interaction.showModal(modal);
           }
 
-          // ================= FEEDBACK =================
+          // FEEDBACK
           if (interaction.isModalSubmit() && interaction.customId === "ticket_feedback") {
 
             const stars = interaction.fields.getTextInputValue("stars");
