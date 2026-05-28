@@ -232,7 +232,6 @@ let connecting = false;
 client.on("voiceStateUpdate", async (oldState, newState) => {
   try {
 
-    // SAFE: kein WAITING_ROOM Crash mehr
     const channel = oldState.channel || newState.channel;
     if (!channel) return;
 
@@ -266,22 +265,6 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
       }
 
       connecting = false;
-
-      const musicPath = path.join(__dirname, "musik.mp3");
-
-      if (fs.existsSync(musicPath)) {
-        const music = createAudioResource(musicPath, { inlineVolume: true });
-        music.volume.setVolume(0.15);
-
-        musicPlayer = createAudioPlayer({
-          behaviors: { noSubscriber: NoSubscriberBehavior.Play }
-        });
-
-        musicPlayer.play(music);
-        connection.subscribe(musicPlayer);
-      } else {
-        console.log("❌ musik.mp3 fehlt");
-      }
     }
 
   } catch (err) {
