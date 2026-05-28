@@ -10,35 +10,24 @@ const {
   ButtonBuilder,
   ButtonStyle,
   Partials,
-  Events
+  Events,
+  MessageFlags
 } = require("discord.js");
 
-const {
-  joinVoiceChannel,
-  createAudioPlayer,
-  createAudioResource,
-  NoSubscriberBehavior,
-  entersState,
-  VoiceConnectionStatus
-} = require("@discordjs/voice");
-
-const gtts = require("gtts");
-const path = require("path");
-
-/* ================= RENDER SAFETY ================= */
+/* ================= SAFETY ================= */
 if (global.__MIAMI_BOT__) {
   console.log("⚠️ Bot already running (duplicate prevented)");
-} else {
-  global.__MIAMI_BOT__ = true;
+  process.exit(0);
 }
+global.__MIAMI_BOT__ = true;
 
-/* ================= CHECK TOKEN ================= */
+/* ================= TOKEN CHECK ================= */
 if (!process.env.DISCORD_TOKEN) {
   console.error("❌ DISCORD_TOKEN fehlt in .env");
   process.exit(1);
 }
 
-/* ================= EXPRESS ================= */
+/* ================= EXPRESS (KEEP FOR RENDER + UPTIME ROBOT) ================= */
 const app = express();
 
 app.get("/", (_, res) => res.send("Bot läuft"));
@@ -54,7 +43,6 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.GuildMember]
@@ -69,9 +57,7 @@ const VERIFY_CHANNEL = "1489332015349235883";
 const JOIN_ROLE = "1503365832842023005";
 const VERIFIED_ROLE = "1503365888793907372";
 
-const WAITING_ROOM = "1489337872879321281";
 const LOG_CHANNEL = "1508498102200307873";
-
 const EINREISE_CHANNEL = "1489331791159496795";
 const AUSREISE_CHANNEL = "1489331930112462869";
 
@@ -126,21 +112,31 @@ client.on("interactionCreate", async (i) => {
   if (i.customId === "verify") {
     try {
       const role = i.guild.roles.cache.get(VERIFIED_ROLE);
-      if (!role) return i.reply({ content: "❌ Rolle nicht gefunden", ephemeral: true });
+
+      if (!role) {
+        return i.reply({
+          content: "❌ Rolle nicht gefunden",
+          flags: MessageFlags.Ephemeral
+        });
+      }
 
       await i.member.roles.add(role);
-      return i.reply({ content: "✅ Du wurdest verifiziert", ephemeral: true });
+
+      return i.reply({
+        content: "✅ Du wurdest verifiziert",
+        flags: MessageFlags.Ephemeral
+      });
+
     } catch (err) {
       console.log("VERIFY ERROR:", err);
     }
   }
 });
 
-/* ================= CACHE ================= */
+/* ================= JOIN / LEAVE ================= */
 const joinCache = new Map();
 const leaveCache = new Map();
 
-/* ================= JOIN / LEAVE ================= */
 client.on("guildMemberAdd", async (member) => {
   try {
     if (joinCache.has(member.id)) return;
@@ -187,7 +183,7 @@ client.on("guildMemberRemove", async (member) => {
   }
 });
 
-/* ================= SPAM ================= */
+/* ================= SPAM PROTECTION ================= */
 const spamMap = new Map();
 const punish = new Map();
 
@@ -221,54 +217,6 @@ client.on("messageCreate", async (msg) => {
   if (level >= 2) {
     await msg.member.timeout(5 * 60_000, "Spam");
     return msg.channel.send(`⏰ ${msg.author} Timeout wegen Spam`);
-  }
-});
-
-/* ================= VOICE FIXED ================= */
-let connection = null;
-let musicPlayer = null;
-let connecting = false;
-
-client.on("voiceStateUpdate", async (oldState, newState) => {
-  try {
-
-    const channel = oldState.channel || newState.channel;
-    if (!channel) return;
-
-    const humans = channel.members.filter(m => !m.user.bot);
-
-    if (humans.size === 0 && connection) {
-      connection.destroy();
-      connection = null;
-      musicPlayer = null;
-      return;
-    }
-
-    if (!connection && !connecting && newState.channel) {
-      connecting = true;
-
-      connection = joinVoiceChannel({
-        channelId: newState.channel.id,
-        guildId: newState.guild.id,
-        adapterCreator: newState.guild.voiceAdapterCreator,
-        selfDeaf: false
-      });
-
-      try {
-        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
-      } catch (e) {
-        console.log("VOICE CONNECT FAIL");
-        connection?.destroy();
-        connection = null;
-        connecting = false;
-        return;
-      }
-
-      connecting = false;
-    }
-
-  } catch (err) {
-    console.log("VOICE ERROR:", err);
   }
 });
 
